@@ -1,129 +1,105 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+#Importing OpenCV Library for basic image processing functions
+import cv2
+# Importing the Numpy Library for array related functions
+import numpy as np
+# Importing Dlib for deep learning based Modules and face landmark detection
+import dlib
+#importing imutils(face_utils) for basic operations of conversion
+from imutils import face_utils
+import winsound as ws
 
-# C extensions
-*.so
+#Initializing the camera and taking the video to process
+cap = cv2.VideoCapture(0)
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+#Initializing the face detector and landmark detector
+detector = dlib.get_frontal_face_detector()
+#Give the proper path of landmarks detecter file 
+predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
+#status marking for current state
+sleep = 0
+drowsy = 0
+active = 0
+status=""
+color=(0,0,0)
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+def compute(ptA,ptB):
+	dist = np.linalg.norm(ptA - ptB)
+	return dist
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
+def blinked(a,b,c,d,e,f):
+	up = compute(b,d) + compute(c,e)
+	down = compute(a,f)
+	ratio = up/(2.0*down)
 
-# Translations
-*.mo
-*.pot
+	#Checking if it is blinked
+	if(ratio>0.25):
+		return 2
+	elif(ratio>0.21 and ratio<=0.25):
+		return 1
+	else:
+		return 0
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
 
-# Flask stuff:
-instance/
-.webassets-cache
+while True:
+    _, frame = cap.read()
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-# Scrapy stuff:
-.scrapy
+    faces = detector(gray)
+    #detected face in faces array
+    for face in faces:
+        x1 = face.left()
+        y1 = face.top()
+        x2 = face.right()
+        y2 = face.bottom()
 
-# Sphinx documentation
-docs/_build/
+        face_frame = frame.copy()
+        cv2.rectangle(face_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-# PyBuilder
-target/
+        landmarks = predictor(gray, face)
+        landmarks = face_utils.shape_to_np(landmarks)
 
-# Jupyter Notebook
-.ipynb_checkpoints
+        #The numbers are actually the landmarks which will show eye
+        left_blink = blinked(landmarks[36],landmarks[37], 
+        	landmarks[38], landmarks[41], landmarks[40], landmarks[39])
+        right_blink = blinked(landmarks[42],landmarks[43], 
+        	landmarks[44], landmarks[47], landmarks[46], landmarks[45])
+        
+        #Now judge what to do for the eye blinks
+        if(left_blink==0 or right_blink==0):
+        	sleep+=1
+        	drowsy=0
+        	active=0
+        	if(sleep>6):
+        		status="SLEEPING !!!"
+        		color = (255,0,0)
+        		ws.Beep(3200,5000)      #here system will make sound while sleeping...
 
-# IPython
-profile_default/
-ipython_config.py
+        elif(left_blink==1 or right_blink==1):
+        	sleep=0
+        	active=0
+        	drowsy+=1
+        	if(drowsy>6):
+        		status="Drowsy !"
+        		color = (0,0,255)
+        		ws.Beep(3200,3500)         #here system will make sound while drowsy...
 
-# pyenv
-.python-version
+        else:
+        	drowsy=0
+        	sleep=0
+        	active+=1
+        	if(active>6):
+        		status="Active :)"
+        		color = (0,255,0)
+        	
+        cv2.putText(frame, status, (100,100), cv2.FONT_HERSHEY_SIMPLEX, 1.2, color,3)
 
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
+        for n in range(0, 68):
+        	(x,y) = landmarks[n]
+        	cv2.circle(face_frame, (x, y), 1, (255, 255, 255), -1)
 
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
+    cv2.imshow("Frame", frame)
+    cv2.imshow("Result of detector", face_frame)
+    key = cv2.waitKey(1)
+    if key == 27:
+      	break
